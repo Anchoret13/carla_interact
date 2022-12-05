@@ -11,9 +11,9 @@ import numpy as np
 from gym import spaces
 
 import carla
-from carla import agents
+# from carla import agents
 from agents.navigation.basic_agent import BasicAgent
-from origin_navigation.roaming_agent import RoamingAgent
+# from origin_navigation.roaming_agent import RoamingAgent
 
 from carla_env.carla_sync_mode import CarlaSyncMode
 from carla_env.carla_weather import Weather
@@ -25,7 +25,7 @@ class CarlaEnv(gym.Env):
         self.render_display = render
         self.changing_weather_speed = float(changing_weather_speed)
         self.frame_skip = frame_skip
-        self.observation_type = observations_type
+        self.observations_type = observations_type
         self.traffic = traffic
         self.vehicle_name = vehicle_name
         self.map_name = map_name
@@ -36,11 +36,14 @@ class CarlaEnv(gym.Env):
         if self.render_display:
             pygame.init()
             self.render_display = pygame.display.set_mode((800, 600), pygame.HWSURFACE | pygame.DOUBLEBUF)
-            # self.font = self.get_font()
+            self.font = get_font()
             self.clock = pygame.time.Clock()
 
         self.client = carla.Client('localhost', carla_port)
         self.client.set_timeout(4.0)
+
+        self.world = self.client.load_world(self.map_name)
+        self.map = self.world.get_map()
 
         self.world.tick()
         actor_list = self.world.get_actors()
@@ -55,7 +58,7 @@ class CarlaEnv(gym.Env):
 
         # create vehicle
         self.vehicle = None
-        self.vehicle_list = []
+        self.vehicles_list = []
         self._reset_vehicle()
         self.actor_list.append(self.vehicle)
 
@@ -72,7 +75,7 @@ class CarlaEnv(gym.Env):
             self.actor_list.append(self.camera_display)
 
         # spawn camera for pixel observations
-        if self.observation_type == 'pixel':
+        if self.observations_type == 'pixel':
             bp = blueprint_library.find('sensor.camera.rgb')
             bp.set_attribute('image_size_x', str(84))
             bp.set_attribute('image_size_y', str(84))
@@ -106,7 +109,7 @@ class CarlaEnv(gym.Env):
         self.agent = BasicAgent(self.vehicle)
 
         # initial observation
-        if self.observation_type == 'state':
+        if self.observations_type == 'state':
             obs = self._get_state_obs()
         else:
             obs = np.zeros((3, 84, 84))
@@ -213,29 +216,10 @@ class CarlaEnv(gym.Env):
                 break
 
         return next_obs, np.mean(rewards), done, info
-    
-    def should_quit():
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return True
-            elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_ESCALE:
-                    return True
-        return False
-
-    def draw_image(surface, image, blend = False):
-        array = np.frombuffer(image.raw_data, dtype=np.dtype('uint8'))
-        array = np.reshape(array, (image.height, image.width, 4))
-        array = array[:, :, :3]
-        array = array[:, :, ::-1]
-        image_surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
-        if blend:
-            image_surface.set_alpha(100)
-        surface.blit(image_surface, (0, 0))
 
     def _simulator_step(self,action):
         if self.render_display:
-            if self.should_quit():
+            if should_quit():
                 return
             self.clock.tick()
 
@@ -261,7 +245,7 @@ class CarlaEnv(gym.Env):
 
         self.vehicle.apply_control(vehicle_control)
 
-        if self.render_display and self.observation_type == 'pixel':
+        if self.render_display and self.observations_type == 'pixel':
             snapshot, display_image, vision_image = self.sync_mode.tick(timeout=2.0)
         elif self.render_display and self.observations_type == 'state':
             snapshot, display_image = self.sync_mode.tick(timeout=2.0)
@@ -276,7 +260,7 @@ class CarlaEnv(gym.Env):
 
         # draw the display
         if self.render_display:
-            self.draw_image(self.render_display, display_image)
+            draw_image(self.render_display, display_image)
             self.render_display.blit(self.font.render('Frame: %d' % self.count, True, (255, 255, 255)), (8, 10))
             self.render_display.blit(self.font.render('Thottle: %f' % throttle, True, (255, 255, 255)), (8, 28))
             self.render_display.blit(self.font.render('Steer: %f' % steer, True, (255, 255, 255)), (8, 46))
@@ -285,10 +269,10 @@ class CarlaEnv(gym.Env):
             pygame.display.flip()
 
         reward, done, info = self._get_reward()
-        if self.observation_type == 'state':
+        if self.observations_type == 'state':
             next_obs = self._get_state_obs()
         else:
-            next_obs = self.get_pixel_obs(vision_image)
+            next_obs = self._get_pixel_obs(vision_image)
 
         self.count += 1
 
@@ -322,3 +306,92 @@ class CarlaEnv(gym.Env):
                          acceleration,
                          angular_velocity,
                          velocity], dtype=np.float64)
+
+    def _get_reward(self):
+        vehicle_location = self.vehicle.get_location()
+        follow_waypoint_reward = self._get_follow_waypoint_reward(vehicle_location)
+        done, collision_reward = self._get_collision_reward()
+        cost = self._get_cost()
+        total_reward = 100 * follow_waypoint_reward + 100 * collision_reward
+
+        info_dict = dict()
+        info_dict['follow_waypoint_reward'] = follow_waypoint_reward
+        info_dict['collision_reward'] = collision_reward
+        info_dict['cost'] = cost
+
+        return total_reward, done, info_dict
+
+    def _get_follow_waypoint_reward(self, location):
+        nearest_wp = self.map.get_waypoint(location, project_to_road=True)
+        distance = np.sqrt(
+            (location.x - nearest_wp.transform.location.x) ** 2 +
+            (location.y - nearest_wp.transform.location.y) ** 2
+        )
+        return - distance
+
+    def _get_collision_reward(self):
+        if not self.collision:
+            return False, 0
+        else:
+            return True, -1
+
+    def _get_cost(self):
+        # TODO: define cost function
+        return 0
+
+    def _on_collision(self, event):
+        other_actor = get_actor_name(event.other_actor)
+        self.collision = True
+        self._reset_vehicle()
+
+    def close(self):
+        for actor in self.actor_list:
+            actor.destroy()
+        print('\ndestroying %d vehicles' % len(self.vehicles_list))
+        self.client.apply_batch([carla.command.DestroyActor(x) for x in self.vehicles_list])
+        time.sleep(0.5)
+        pygame.quit()
+    
+    def render(self, mode):
+        pass
+
+# HELPER FUNCTIONS
+def vector_to_scalar(vector):
+    scalar = np.around(np.sqrt(vector.x ** 2 +
+                               vector.y ** 2 +
+                               vector.z ** 2), 2)
+    return scalar
+
+
+def draw_image(surface, image, blend=False):
+    array = np.frombuffer(image.raw_data, dtype=np.dtype('uint8'))
+    array = np.reshape(array, (image.height, image.width, 4))
+    array = array[:, :, :3]
+    array = array[:, :, ::-1]
+    image_surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
+    if blend:
+        image_surface.set_alpha(100)
+    surface.blit(image_surface, (0, 0))
+
+
+def get_font():
+    fonts = [x for x in pygame.font.get_fonts()]
+    default_font = 'ubuntumono'
+    font = default_font if default_font in fonts else fonts[0]
+    font = pygame.font.match_font(font)
+    return pygame.font.Font(font, 14)
+
+
+def should_quit():
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            return True
+        elif event.type == pygame.KEYUP:
+            if event.key == pygame.K_ESCAPE:
+                return True
+    return False
+
+
+def get_actor_name(actor, truncate=250):
+    name = ' '.join(actor.type_id.replace('_', '.').title().split('.')[1:])
+    return (name[:truncate - 1] + u'\u2026') if len(name) > truncate else name

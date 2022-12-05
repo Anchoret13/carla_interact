@@ -9,9 +9,9 @@ register(
         'carla_port': 2000,
         'changing_weather_speed': 0.1,
         'frame_skip': 1,
-        'observations_type': 'state',
+        'observations_type': 'pixel',
         'traffic': True,
-        'vehicle_name': 'tesla.cybertruck',
+        'vehicle_name': 'audi.etron',
         'map_name': 'Town05',
         'autopilot': True
     }

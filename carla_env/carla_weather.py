@@ -33,6 +33,23 @@ class Weather(object):
     def __str__(self):
         return '%s %s' % (self._sun, self._storm)
 
+class Sun(object):
+    def __init__(self, azimuth, altitude):
+        self.azimuth = azimuth
+        self.altitude = altitude
+        self._t = 0.0
+
+    def tick(self, delta_seconds):
+        self._t += 0.008 * delta_seconds
+        self._t %= 2.0 * math.pi
+        self.azimuth += 0.25 * delta_seconds
+        self.azimuth %= 360.0
+        min_alt, max_alt = [20, 90]
+        self.altitude = 0.5 * (max_alt + min_alt) + 0.5 * (max_alt - min_alt) * math.cos(self._t)
+
+    def __str__(self):
+        return 'Sun(alt: %.2f, azm: %.2f)' % (self.altitude, self.azimuth)
+
 class Storm(object):
     def __init__(self, precipitation):
         self._t = precipitation if precipitation > 0.0 else -50.0

@@ -9,7 +9,7 @@ register(
         'carla_port': 2000,
         'changing_weather_speed': 0.1,
         'frame_skip': 1,
-        'observations_type': 'pixel',
+        'observations_type': 'state',
         'traffic': True,
         'vehicle_name': 'audi.etron',
         'map_name': 'Town05',

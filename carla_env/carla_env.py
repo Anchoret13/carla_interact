@@ -279,6 +279,8 @@ class CarlaEnv(gym.Env):
         return next_obs, reward, done, info
     
     def _get_pixel_obs(self, vision_image):
+        print(vision_image)
+        print(vision_image.raw_data)
         bgra = np.array(vision_image.raw_data).reshape(84, 84, 4)
         bgr = bgra[:, :, :3]
         rgb = np.flip(bgr, axis=2)

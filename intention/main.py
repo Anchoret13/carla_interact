@@ -4,11 +4,11 @@ import torch
 import os
 
 from objectworld import ObjectWorld
-from binaryworld import BinaryWorld
+# from binaryworld import BinaryWorld
 from sem import SEM
 from mcem import MCEM
 from mdp import MDP
-from drawing import Drawing
+# from drawing import Drawing
 torch.manual_seed(0)
 
 miirl_type = 'SEM' # either 'SEM' or 'MCEM', where 'SEM' : SEM-MIIRL and 'MCEM' : MCEM-MIIRL 
@@ -99,7 +99,7 @@ mirl_solutions, EVDs, rewardssquence = Mirl.momaxentrun(maxIter = mirl_maxiter)
 
 print('MIRL training is finished')
 print('Generating the picture ...')
-Drawing(game, rewards, rewardssquence, model, linmodel_solutions,all_example_samples, mirl_solutions,image_path)
+# Drawing(game, rewards, rewardssquence, model, linmodel_solutions,all_example_samples, mirl_solutions,image_path)
 
 checkpoint['rewards'] = rewards
 checkpoint['rewards_types'] = rewards_types
